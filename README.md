@@ -13,7 +13,7 @@ A lightweight, single-header C library providing efficient implementations of co
 
 ## Features
 
-- **Hash Table** — O(1) average insert/lookup/delete with automatic resizing
+- **Hash Table** — O(1) average insert/lookup/delete with automatic resizing with Generic keys (int, string, struct, pointer)
 - **Dynamic List** — Growable array with map, filter, and foreach operations
 - **Type-Safe Generics** — Compile-time type safety via macros
 - **Error Handling** — Thread-local errno-style error system
@@ -105,23 +105,36 @@ Then include with:
 
 ### Hash Table
 
+The hash table supports **any key type** (strings, integers, structs, pointers). You provide custom hash and comparison functions.
+
+**Example: String Keys**
+
 ```c
 #define DSC_IMPLEMENTATION
 #include "dsc.h"
 #include <stdio.h>
+#include <string.h>
 
-// Custom hash function (required)
-uint64_t my_hash(const char* key, size_t len) {
+// String comparison function
+int str_cmp(const void* k1, size_t l1, const void* k2, size_t l2) {
+    (void)l1; (void)l2;
+    return strcmp((const char*)k1, (const char*)k2);
+}
+
+// String hash function (djb2)
+uint64_t str_hash(const void* key, size_t len) {
+    const char* str = (const char*)key;
     uint64_t hash = 5381;
-    for (size_t i = 0; i < len; i++) {
-        hash = ((hash << 5) + hash) + (uint64_t)key[i];
+    int c;
+    while ((c = *str++)) {
+        hash = ((hash << 5) + hash) + (uint64_t)c;
     }
     return hash;
 }
 
 int main(void) {
-    // Create hash table with initial capacity of 64
-    dsc_hash_table* ht = dsc_hash_table_init(64, my_hash);
+    // Create hash table: capacity=64, key_size=0 (variable-length strings)
+    dsc_hash_table* ht = dsc_hash_table_init(64, 0, str_hash, str_cmp);
     if (ht == NULL) {
         fprintf(stderr, "Error: %s\n", dsc_strerror(dsc_get_error()));
         return 1;
@@ -147,6 +160,43 @@ int main(void) {
     }
 
     // Cleanup
+    dsc_hash_table_destroy(ht, NULL);
+    return 0;
+}
+```
+
+**Example: Integer Keys**
+
+```c
+// Integer comparison function
+int int_cmp(const void* k1, size_t l1, const void* k2, size_t l2) {
+    (void)l1; (void)l2;
+    return *(int*)k1 - *(int*)k2;
+}
+
+// Integer hash function (FNV-1a)
+uint64_t int_hash(const void* key, size_t len) {
+    (void)len;
+    uint64_t hash = 14695981039346656037ULL;
+    const uint8_t* bytes = (const uint8_t*)key;
+    for (size_t i = 0; i < sizeof(int); i++) {
+        hash ^= bytes[i];
+        hash *= 1099511628211ULL;
+    }
+    return hash;
+}
+
+int main(void) {
+    // Create hash table with fixed-size integer keys
+    dsc_hash_table* ht = dsc_hash_table_init(64, sizeof(int), int_hash, int_cmp);
+    
+    int key = 42;
+    char* value = "The Answer";
+    dsc_hash_table_insert(ht, &key, value);
+    
+    char* result = (char*)dsc_hash_table_get(ht, &key);
+    printf("%d -> %s\n", key, result);  // "42 -> The Answer"
+    
     dsc_hash_table_destroy(ht, NULL);
     return 0;
 }
@@ -498,13 +548,40 @@ void         dsc_clear_error(void);          // Clear error state
 
 ### Hash Table
 
+**Type Definitions:**
 ```c
-dsc_hash_table* dsc_hash_table_init(size_t capacity, dsc_hashfunc *hf);
-bool            dsc_hash_table_insert(dsc_hash_table *ht, const char *key, void *obj);
-void*           dsc_hash_table_get(dsc_hash_table *ht, const char *key);
-void*           dsc_hash_table_delete(dsc_hash_table *ht, const char *key);
+typedef uint64_t dsc_hashfunc(const void* key, size_t key_size);
+typedef int      dsc_cmpfunc(const void* key1, size_t len1, const void* key2, size_t len2);
+typedef void     dsc_cleanupfunc(void* obj);
+```
+
+**Functions:**
+```c
+// Initialize hash table
+// capacity: initial size, key_size: size of keys (0 for variable-length strings)
+// hf: hash function, cf: comparison function
+dsc_hash_table* dsc_hash_table_init(size_t capacity, size_t key_size, 
+                                     dsc_hashfunc *hf, dsc_cmpfunc *cf);
+
+// Insert key-value pair (returns false if key exists or on error)
+bool            dsc_hash_table_insert(dsc_hash_table *ht, const void *key, void *obj);
+
+// Get value by key (returns NULL if not found)
+void*           dsc_hash_table_get(dsc_hash_table *ht, const void *key);
+
+// Delete key and return its value (returns NULL if not found)
+void*           dsc_hash_table_delete(dsc_hash_table *ht, const void *key);
+
+// Destroy hash table (cf is optional cleanup function for values)
 void            dsc_hash_table_destroy(dsc_hash_table *ht, dsc_cleanupfunc *cf);
 ```
+
+**Supported Key Types:**
+- **Strings** — Use `key_size = 0` for variable-length null-terminated strings
+- **Integers** — Use `key_size = sizeof(int)` (or other numeric type)
+- **Structs** — Use `key_size = sizeof(YourStruct)`
+- **Pointers** — Use `key_size = sizeof(void*)`
+- **Custom** — Any fixed-size data with appropriate hash and comparison functions
 
 ### Dynamic List
 
@@ -524,8 +601,26 @@ dsc_list dsc_list_filter(dsc_list* list, dsc_predicate cf);
 ### Type-Safe Macros
 
 ```c
-DSC_DEFINE_LIST(Type, name)        // Generate name_list type and functions
-DSC_DEFINE_HASH_TABLE(Type, name)  // Generate name_table type and functions
+// Generate type-safe list wrapper
+// Type: element type, name: prefix for generated functions
+DSC_DEFINE_LIST(Type, name)
+// Generates: name_list type and name_list_init(), name_list_append(), etc.
+
+// Generate type-safe hash table wrapper  
+// KeyType: key type, ValueType: value type, name: prefix for generated functions
+DSC_DEFINE_HASH_TABLE(KeyType, ValueType, name)
+// Generates: name_table type and name_table_init(), name_table_insert(), etc.
+```
+
+**Example:**
+```c
+// Integer list
+DSC_DEFINE_LIST(int, int)
+int_list nums = int_list_init(16);
+
+// Hash table with int keys and string values
+DSC_DEFINE_HASH_TABLE(int, char*, int_str)
+int_str_table table = int_str_table_init(64, int_hash, int_cmp);
 ```
 
 ## Running Tests
