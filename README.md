@@ -3,6 +3,11 @@
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 [![C Standard](https://img.shields.io/badge/C-C99%2B-blue.svg)](https://en.wikipedia.org/wiki/C99)
 [![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey.svg)]()
+[![Status](https://img.shields.io/badge/Status-Early%20Development-red.svg)]()
+
+> ⚠️ **IMPORTANT:** This library is currently in early development and is **NOT READY FOR PRODUCTION OR COMMERCIAL USE**. The API is unstable and may change significantly between versions. Use at your own risk.
+
+> 💡 **Type-Safe Usage:** DSC provides **type-safe generic macros** (eg. `DSC_DEFINE_LIST`, `DSC_DEFINE_HASH_TABLE`) that generate wrapper functions for your specific types. We recommend using these macros for the best experience and compile-time type safety. While raw void\* functions are available, the type-safe wrappers eliminate casting and make your code cleaner and safer. Check out the [Type-Safe Wrappers](#type-safe-wrappers) section to see how easy it is!
 
 A lightweight, single-header C library providing efficient implementations of common data structures. Designed in the style of [STB libraries](https://github.com/nothings/stb) for maximum portability and ease of integration.
 
@@ -31,6 +36,7 @@ A lightweight, single-header C library providing efficient implementations of co
     - [Dynamic List](#dynamic-list)
     - [Type-Safe Wrappers](#type-safe-wrappers)
     - [Error Handling](#error-handling)
+    - [Raw API (void\* Functions)](#raw-api-void-functions)
   - [Building](#building)
     - [Header-Only (Recommended)](#header-only-recommended)
     - [Static Library](#static-library)
@@ -299,6 +305,70 @@ int main(void) {
 | `DSC_ERANGE` | Index out of range |
 | `DSC_EEMPTY` | Container is empty |
 | `DSC_EHASHFUNC` | Hash function is NULL or invalid |
+
+### Raw API (void\* Functions)
+
+For advanced use cases where you need more flexibility, DSC exposes raw void\* functions. This is useful when working with mixed types or when type-safe wrappers would be too restrictive:
+
+```c
+#define DSC_IMPLEMENTATION
+#include "dsc.h"
+#include <stdio.h>
+
+typedef struct {
+    char name[32];
+    int age;
+    float height;
+} Person;
+
+int main(void) {
+    // Create a generic list that can hold any data
+    dsc_list mixed_list;
+    dsc_list_init(&mixed_list, sizeof(void*), 16);
+
+    // Store different types by their pointers
+    int numbers[] = {10, 20, 30};
+    Person people[] = {
+        {"Alice", 25, 5.6f},
+        {"Bob", 30, 5.9f}
+    };
+
+    // Append pointers to different types
+    for (int i = 0; i < 3; i++) {
+        dsc_list_append(&mixed_list, &numbers[i]);
+    }
+
+    for (int i = 0; i < 2; i++) {
+        dsc_list_append(&mixed_list, &people[i]);
+    }
+
+    // Retrieve and work with raw pointers
+    int* first_num = *(int**)dsc_list_get(&mixed_list, 0);
+    if (first_num != NULL) {
+        printf("First number: %d\n", *first_num);
+    }
+
+    Person* first_person = *(Person**)dsc_list_get(&mixed_list, 3);
+    if (first_person != NULL) {
+        printf("First person: %s, age %d\n", first_person->name, first_person->age);
+    }
+
+    dsc_list_destroy(&mixed_list);
+    return 0;
+}
+```
+
+**Raw API Functions:**
+
+- `dsc_hash_table_get()`, `dsc_hash_table_insert()`, `dsc_hash_table_delete()` — Work with void\* pointers
+- `dsc_list_get()`, `dsc_list_append()` — Return/accept void\* pointers
+- `dsc_list_map()`, `dsc_list_foreach()` — Execute callbacks on void\* items
+- `dsc_list_filter()` — Filter using predicates on void\* items
+
+> **Note:** When using raw void\* APIs, you're responsible for:
+> - Correct pointer casting and dereferencing
+> - Type consistency (don't mix types in the same container unless intended)
+> - Memory management of the actual data (DSC manages containers only)
 
 ## Building
 
