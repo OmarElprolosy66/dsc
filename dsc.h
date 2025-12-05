@@ -15,7 +15,7 @@
  * 
  * FEATURES
  * --------
- *   • Hash Table    — O(1) average insert/lookup/delete with automatic resizing
+ *   • Hash Table    — O(1) average insert/lookup/delete with automatic resizing with Generic keys (int, string, struct, pointer)
  *   • Dynamic List  — Growable array with map, filter, and foreach operations
  *   • Type-Safe     — Generic macros for compile-time type safety
  *   • Error System  — Thread-local errno-style error handling
@@ -48,11 +48,28 @@
  * 
  * EXAMPLE USAGE
  * -------------
- *     // Hash table
- *     dsc_hash_table* ht = dsc_hash_table_init(64, my_hash_func);
+ *     // Hash table with string keys
+ *     int str_cmp(const void* k1, size_t l1, const void* k2, size_t l2) {
+ *         return strcmp((const char*)k1, (const char*)k2);
+ *     }
+ *     uint64_t str_hash(const void* k, size_t len) {
+ *         // djb2 hash...
+ *     }
+ *     dsc_hash_table* ht = dsc_hash_table_init(64, 0, str_hash, str_cmp);
  *     dsc_hash_table_insert(ht, "key", value_ptr);
  *     void* val = dsc_hash_table_get(ht, "key");
  *     dsc_hash_table_destroy(ht, NULL);
+ * 
+ *     // Hash table with integer keys
+ *     int int_cmp(const void* k1, size_t l1, const void* k2, size_t l2) {
+ *         return *(int*)k1 - *(int*)k2;
+ *     }
+ *     uint64_t int_hash(const void* k, size_t len) {
+ *         // FNV-1a hash...
+ *     }
+ *     dsc_hash_table* ht = dsc_hash_table_init(64, sizeof(int), int_hash, int_cmp);
+ *     int key = 42;
+ *     dsc_hash_table_insert(ht, &key, value_ptr);
  * 
  *     // Dynamic list
  *     dsc_list list;
@@ -150,7 +167,8 @@ extern "C" {
     X(DSC_EEXISTS,   "Key already exists")                      \
     X(DSC_ERANGE,    "Index out of range")                      \
     X(DSC_EEMPTY,    "Container is empty")                      \
-    X(DSC_EHASHFUNC, "Hash function is NULL or invalid")
+    X(DSC_EHASHFUNC, "Hash function is NULL or invalid")        \
+    X(DSC_ECMPFUNC,  "Comparison function is NULL or invalid")
 
 /* Generate the enum */
 typedef enum {
@@ -188,41 +206,45 @@ DSC_API void         DSC_FUNC(clear_error)(void);
 #include <stdbool.h>
 
 typedef struct _dsc_kvpair {
-    const char           *key;
     void                 *obj;
     struct _dsc_kvpair   *next;
+    void                 *key;
+    size_t               key_size;
 } dsc_kvpair;
 
-typedef uint64_t dsc_hashfunc(const char*, size_t);
+typedef uint64_t dsc_hashfunc(const void*, size_t);
+typedef int      dsc_cmpfunc(const void*, size_t, const void*, size_t);
 
 typedef struct _dsc_hash_table {
     size_t          size;
     size_t          capacity;
+    size_t          key_size;
     dsc_hashfunc    *hf;
+    dsc_cmpfunc     *cf;
     dsc_kvpair      **kvpairs;
 } dsc_hash_table;
 
 typedef void dsc_cleanupfunc(void*);
 
-DSC_API dsc_hash_table* DSC_FUNC(hash_table_init)(size_t size, dsc_hashfunc *hf);
-DSC_API bool            DSC_FUNC(hash_table_insert)(dsc_hash_table *ht, const char *key, void *obj);
-DSC_API void*           DSC_FUNC(hash_table_get)(dsc_hash_table *ht, const char *key);
-DSC_API void*           DSC_FUNC(hash_table_delete)(dsc_hash_table *ht, const char *key);
+DSC_API dsc_hash_table* DSC_FUNC(hash_table_init)(size_t size, size_t key_size, dsc_hashfunc *hf, dsc_cmpfunc *cf);
+DSC_API bool            DSC_FUNC(hash_table_insert)(dsc_hash_table *ht, const void *key, void *obj);
+DSC_API void*           DSC_FUNC(hash_table_get)(dsc_hash_table *ht, const void *key);
+DSC_API void*           DSC_FUNC(hash_table_delete)(dsc_hash_table *ht, const void *key);
 DSC_API void            DSC_FUNC(hash_table_destroy)(dsc_hash_table *ht, dsc_cleanupfunc *cf);
 
-#define DSC_DEFINE_HASH_TABLE(T, NAME) \
+#define DSC_DEFINE_HASH_TABLE(K, T, NAME) \
     typedef struct { dsc_hash_table *impl; } NAME##_table; \
-    static inline NAME##_table NAME##_table_init(size_t s, dsc_hashfunc *hf) { \
-        return (NAME##_table){ DSC_FUNC(hash_table_init)(s, hf) }; \
+    static inline NAME##_table NAME##_table_init(size_t s, dsc_hashfunc *hf, dsc_cmpfunc *cf) { \
+        return (NAME##_table){ DSC_FUNC(hash_table_init)(s, sizeof(K), hf, cf) }; \
     } \
-    static inline bool NAME##_table_insert(NAME##_table *t, const char *k, T v) { \
-        return DSC_FUNC(hash_table_insert)(t->impl, k, (void*)v); \
+    static inline bool NAME##_table_insert(NAME##_table *t, K *k, T v) { \
+        return DSC_FUNC(hash_table_insert)(t->impl, (const void*)k, (void*)v); \
     } \
-    static inline T NAME##_table_get(NAME##_table *t, const char *k) { \
-        return (T)DSC_FUNC(hash_table_get)(t->impl, k); \
+    static inline T NAME##_table_get(NAME##_table *t, K *k) { \
+        return (T)DSC_FUNC(hash_table_get)(t->impl, (const void*)k); \
     } \
-    static inline T NAME##_table_delete(NAME##_table *t, const char *k) { \
-        return (T)DSC_FUNC(hash_table_delete)(t->impl, k); \
+    static inline T NAME##_table_delete(NAME##_table *t, K *k) { \
+        return (T)DSC_FUNC(hash_table_delete)(t->impl, (const void*)k); \
     } \
     static inline void NAME##_table_destroy(NAME##_table *t, dsc_cleanupfunc *cf) { \
         DSC_FUNC(hash_table_destroy)(t->impl, cf); \
@@ -345,12 +367,19 @@ const char* DSC_FUNC(strerror)(dsc_error_t err) {
  * |                   HASHTABLE Implementation                     |
  * +----------------------------------------------------------------+
  */
-dsc_hash_table *DSC_FUNC(hash_table_init)(size_t capacity, dsc_hashfunc *hf)
+dsc_hash_table *DSC_FUNC(hash_table_init)(size_t capacity, size_t key_size, dsc_hashfunc *hf, dsc_cmpfunc *cf)
 {
     dsc_set_error(DSC_EOK);
 
     if (hf == NULL) {
         dsc_set_error(DSC_EHASHFUNC);
+        return NULL;
+    }
+
+    /* key_size can be 0 for variable-length keys (e.g., strings) */
+
+    if (cf == NULL) {
+        dsc_set_error(DSC_ECMPFUNC);
         return NULL;
     }
 
@@ -365,6 +394,8 @@ dsc_hash_table *DSC_FUNC(hash_table_init)(size_t capacity, dsc_hashfunc *hf)
     *ht = (dsc_hash_table) {
         .capacity = capacity,
         .hf       = hf,
+        .cf       = cf,
+        .key_size = key_size,
         .kvpairs  = (dsc_kvpair **)calloc(capacity, sizeof(dsc_kvpair *))
     };
     if (ht->kvpairs == NULL) {
@@ -377,7 +408,7 @@ dsc_hash_table *DSC_FUNC(hash_table_init)(size_t capacity, dsc_hashfunc *hf)
     return ht;
 }
 
-bool DSC_FUNC(hash_table_insert)(dsc_hash_table *ht, const char *key, void *obj)
+bool DSC_FUNC(hash_table_insert)(dsc_hash_table *ht, const void *key, void *obj)
 {
     dsc_set_error(DSC_EOK);
 
@@ -402,7 +433,7 @@ bool DSC_FUNC(hash_table_insert)(dsc_hash_table *ht, const char *key, void *obj)
             while (tmp != NULL) {
                 dsc_kvpair *next = tmp->next;
 
-                uint32_t new_index = ht->hf(tmp->key, strlen(tmp->key)) % ht->capacity;
+                uint32_t new_index = ht->hf(tmp->key, tmp->key_size) % ht->capacity;
                 assert(new_index < ht->capacity); // Ensure the index is within bounds
 
                 tmp->next = new_kvpairs[new_index];
@@ -422,7 +453,14 @@ bool DSC_FUNC(hash_table_insert)(dsc_hash_table *ht, const char *key, void *obj)
     }
     dsc_set_error(DSC_EOK);
 
-    uint32_t index = ht->hf(key, strlen(key)) % ht->capacity;
+    /* Calculate actual key size (for variable-length keys like strings) */
+    size_t actual_key_size = ht->key_size;
+    if (actual_key_size == 0) {
+        /* Variable-length key - assume null-terminated string */
+        actual_key_size = strlen((const char*)key) + 1;
+    }
+
+    uint32_t index = ht->hf(key, actual_key_size) % ht->capacity;
 
     dsc_kvpair *kvp = (dsc_kvpair *)malloc(sizeof(dsc_kvpair));
     if (kvp == NULL) {
@@ -431,14 +469,17 @@ bool DSC_FUNC(hash_table_insert)(dsc_hash_table *ht, const char *key, void *obj)
     }
 
     *kvp = (dsc_kvpair) {
-        .key = strdup(key),
-        .obj = obj
+        .key      = malloc(actual_key_size),
+        .obj      = obj,
+        .key_size = actual_key_size
     };
     if (kvp->key == NULL) {
         dsc_set_error(DSC_ENOMEM);
         free(kvp);
-        return false;  // strdup failed
+        return false;
     }
+
+    memcpy(kvp->key, key, actual_key_size);
 
     kvp->next = ht->kvpairs[index];
     ht->kvpairs[index] = kvp;
@@ -479,7 +520,7 @@ void DSC_FUNC(hash_table_destroy)(dsc_hash_table *ht, dsc_cleanupfunc *cf)
     free(ht); ht = NULL;
 }
 
-void *DSC_FUNC(hash_table_delete)(dsc_hash_table *ht, const char *key)
+void *DSC_FUNC(hash_table_delete)(dsc_hash_table *ht, const void *key)
 {
     dsc_set_error(DSC_EOK);
 
@@ -488,11 +529,17 @@ void *DSC_FUNC(hash_table_delete)(dsc_hash_table *ht, const char *key)
         return NULL;
     }
 
-    uint32_t index = ht->hf(key, strlen(key)) % ht->capacity;
+    /* Calculate key size for variable-length keys */
+    size_t key_size = ht->key_size;
+    if (key_size == 0) {
+        key_size = strlen((const char*)key) + 1;
+    }
+
+    uint32_t index = ht->hf(key, key_size) % ht->capacity;
 
     dsc_kvpair *tmp  = ht->kvpairs[index];
     dsc_kvpair *prev = NULL;
-    while (tmp != NULL && strcmp(tmp->key, key) != 0) {
+    while (tmp != NULL && ht->cf(tmp->key, tmp->key_size, key, key_size) != 0) {
         prev = tmp;
         tmp  = tmp->next;
     }
@@ -512,7 +559,7 @@ void *DSC_FUNC(hash_table_delete)(dsc_hash_table *ht, const char *key)
     return result;
 }
 
-void *DSC_FUNC(hash_table_get)(dsc_hash_table *ht, const char *key)
+void *DSC_FUNC(hash_table_get)(dsc_hash_table *ht, const void *key)
 {
     dsc_set_error(DSC_EOK);
 
@@ -525,10 +572,16 @@ void *DSC_FUNC(hash_table_get)(dsc_hash_table *ht, const char *key)
         return NULL;
     }
 
-    uint32_t index = ht->hf(key, strlen(key)) % ht->capacity;
+    /* Calculate key size for variable-length keys */
+    size_t key_size = ht->key_size;
+    if (key_size == 0) {
+        key_size = strlen((const char*)key) + 1;
+    }
+
+    uint32_t index = ht->hf(key, key_size) % ht->capacity;
 
     dsc_kvpair *tmp = ht->kvpairs[index];
-    while (tmp != NULL && strcmp(tmp->key, key) != 0) {
+    while (tmp != NULL && ht->cf(tmp->key, tmp->key_size, key, key_size) != 0) {
         tmp = tmp->next;
     }
 
