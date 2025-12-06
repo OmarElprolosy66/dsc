@@ -597,7 +597,7 @@ TEST(list_stress_many_appends) {
 
 int main(void) {
     TEST_INIT();  /* Enable ANSI colors on Windows */
-    printf("=== List Tests ===\n");
+    TEST_HEADER("List Tests");
     
     TEST_SECTION("Initialization");
     RUN_TEST(list_init_basic);

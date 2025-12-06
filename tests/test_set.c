@@ -644,8 +644,8 @@ TEST(set_zero_then_grow) {
    ========================================================= */
 
 int main(void) {
-    TEST_INIT();
-    printf("=== Set Tests ===\n");
+    TEST_INIT();  /* Enable ANSI colors on Windows */
+    TEST_HEADER("Set Tests");
     
     TEST_SECTION("Initialization");
     RUN_TEST(set_init_basic);

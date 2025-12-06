@@ -22,6 +22,9 @@
  *   }
  *   
  *   int main(void) {
+ *       TEST_INIT();
+ *       TEST_HEADER("My Tests");
+ *       TEST_SECTION("Section Name");
  *       RUN_TEST(test_name);
  *       TEST_SUMMARY();
  *       return TEST_EXIT_CODE();
@@ -166,6 +169,10 @@ static const char* _current_test_name = NULL;
 
 /* Exit code based on test results */
 #define TEST_EXIT_CODE() (_tests_failed > 0 ? 1 : 0)
+
+/* Main test header */
+#define TEST_HEADER(name) \
+    printf("\n=== %s ===\n", name)
 
 /* Section header for organizing tests */
 #define TEST_SECTION(name) \

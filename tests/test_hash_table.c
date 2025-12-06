@@ -421,7 +421,7 @@ TEST(hash_table_strerror) {
 
 int main(void) {
     TEST_INIT();  /* Enable ANSI colors on Windows */
-    printf("=== Hash Table Tests ===\n");
+    TEST_HEADER("Hash Table Tests");
     
     TEST_SECTION("Initialization");
     RUN_TEST(hash_table_init_basic);
