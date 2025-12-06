@@ -226,12 +226,12 @@ typedef struct _dsc_hash_table {
 
 typedef void dsc_cleanupfunc(void*);
 
-DSC_API void   DSC_FUNC(hash_table_init)(dsc_hash_table *ht, size_t capacity, size_t key_size, dsc_hashfunc *hf, dsc_cmpfunc *cf);
-DSC_API bool   DSC_FUNC(hash_table_insert)(dsc_hash_table *ht, const void *key, void *obj);
-DSC_API void*  DSC_FUNC(hash_table_get)(dsc_hash_table *ht, const void *key);
-DSC_API void*  DSC_FUNC(hash_table_delete)(dsc_hash_table *ht, const void *key);
-DSC_API void   DSC_FUNC(hash_table_destroy)(dsc_hash_table *ht, dsc_cleanupfunc *cf);
-DSC_API void   DSC_FUNC(hash_table_clear)(dsc_hash_table *ht, dsc_cleanupfunc *cf);
+DSC_API void      DSC_FUNC(hash_table_init)(dsc_hash_table *ht, size_t capacity, size_t key_size, dsc_hashfunc *hf, dsc_cmpfunc *cf);
+DSC_API bool      DSC_FUNC(hash_table_insert)(dsc_hash_table *ht, const void *key, void *obj);
+DSC_API void*     DSC_FUNC(hash_table_get)(dsc_hash_table *ht, const void *key);
+DSC_API void*     DSC_FUNC(hash_table_delete)(dsc_hash_table *ht, const void *key);
+DSC_API void      DSC_FUNC(hash_table_destroy)(dsc_hash_table *ht, dsc_cleanupfunc *cf);
+DSC_API void      DSC_FUNC(hash_table_clear)(dsc_hash_table *ht, dsc_cleanupfunc *cf);
 
 #define DSC_DEFINE_HASH_TABLE(K, T, NAME) \
     typedef struct { dsc_hash_table impl; } NAME##_table; \
@@ -277,6 +277,7 @@ DSC_API void     DSC_FUNC(list_resize)(dsc_list* list, size_t new_size);
 DSC_API void     DSC_FUNC(list_map)(dsc_list* list, dsc_callback cf);
 DSC_API void     DSC_FUNC(list_foreach)(dsc_list* list, dsc_callback cf);
 DSC_API dsc_list DSC_FUNC(list_filter)(dsc_list* list, dsc_predicate cf);
+DSC_API void     DSC_FUNC(list_from_array)(dsc_list* list, const void* array, size_t count, size_t item_size);
 
 #define DSC_DEFINE_LIST(T, NAME) \
     typedef struct { dsc_list impl; } NAME##_list; \
@@ -324,12 +325,14 @@ typedef struct _dsc_set {
     dsc_hash_table* ht;
 } dsc_set;
 
-void  DSC_FUNC(set_init)(dsc_set* set, size_t initial_capacity, size_t key_size, dsc_hashfunc* hf, dsc_cmpfunc* cf);
-void  DSC_FUNC(set_destroy)(dsc_set* set);
-bool  DSC_FUNC(set_add)(dsc_set* set, const void* item);
-void  DSC_FUNC(set_remove)(dsc_set* set, const void* item);
-void* DSC_FUNC(set_get)(dsc_set* set, const void* item);
-void  DSC_FUNC(set_clear)(dsc_set* set);
+DSC_API void      DSC_FUNC(set_init)(dsc_set* set, size_t initial_capacity, size_t key_size, dsc_hashfunc* hf, dsc_cmpfunc* cf);
+DSC_API void      DSC_FUNC(set_destroy)(dsc_set* set);
+DSC_API bool      DSC_FUNC(set_add)(dsc_set* set, const void* item);
+DSC_API void      DSC_FUNC(set_remove)(dsc_set* set, const void* item);
+DSC_API void*     DSC_FUNC(set_get)(dsc_set* set, const void* item);
+DSC_API void      DSC_FUNC(set_clear)(dsc_set* set);
+DSC_API void      DSC_FUNC(set_from_array)(dsc_set* set, const void* array, size_t count, size_t item_size, dsc_hashfunc* hf, dsc_cmpfunc* cf);
+DSC_API dsc_list  DSC_FUNC(set_to_list)(dsc_set* set);
 
 #define DSC_DEFINE_SET(T, NAME) \
     typedef struct { dsc_set impl; } NAME##_set; \
@@ -351,6 +354,20 @@ void  DSC_FUNC(set_clear)(dsc_set* set);
     static inline void NAME##_set_clear(NAME##_set *s) { \
         DSC_FUNC(set_clear)(&s->impl); \
     }
+
+/*
+ * +----------------------------------------------------------------+
+ * |                    Utility Function Declarations               |
+ * +----------------------------------------------------------------+
+ */
+
+/* Hash Table Utilities */
+DSC_API dsc_list  DSC_FUNC(hash_table_keys)(dsc_hash_table *ht);
+DSC_API dsc_list  DSC_FUNC(hash_table_values)(dsc_hash_table *ht);
+
+/* List/Set Conversion Utilities */
+DSC_API dsc_set  DSC_FUNC(list_to_set)(dsc_list* list, dsc_hashfunc* hf, dsc_cmpfunc* cf);
+DSC_API bool     DSC_FUNC(list_has_duplicates)(dsc_list* list, dsc_hashfunc* hf, dsc_cmpfunc* cf);
 
 #ifdef __cplusplus
 }
@@ -649,6 +666,65 @@ void DSC_FUNC(hash_table_clear)(dsc_hash_table *ht, dsc_cleanupfunc *cf)
     ht->size = 0;
 }
 
+dsc_list DSC_FUNC(hash_table_keys)(dsc_hash_table *ht) {
+    dsc_list result = {0};
+    
+    if (ht == NULL) {
+        dsc_set_error(DSC_EINVAL);
+        return result;
+    }
+    dsc_set_error(DSC_EOK);
+
+    size_t key_size = ht->key_size;
+    if (key_size == 0) {
+        key_size = sizeof(void*); /* For variable-length keys, store pointers */
+    }
+
+    DSC_FUNC(list_init)(&result, key_size, ht->size);
+    if (DSC_FUNC(get_error)() != DSC_EOK) {
+        return result;
+    }
+
+    for (size_t i = 0; i < ht->capacity; i++) {
+        dsc_kvpair *kvp = ht->kvpairs[i];
+        while (kvp != NULL) {
+            if (ht->key_size == 0) {
+                /* Variable-length key: store pointer */
+                DSC_FUNC(list_append)(&result, &kvp->key);
+            } else {
+                /* Fixed-size key: store value */
+                DSC_FUNC(list_append)(&result, kvp->key);
+            }
+            kvp = kvp->next;
+        }
+    }
+    return result;
+}
+
+dsc_list DSC_FUNC(hash_table_values)(dsc_hash_table *ht) {
+    dsc_list result = {0};
+    
+    if (ht == NULL) {
+        dsc_set_error(DSC_EINVAL);
+        return result;
+    }
+    dsc_set_error(DSC_EOK);
+
+    DSC_FUNC(list_init)(&result, sizeof(void*), ht->size);
+    if (DSC_FUNC(get_error)() != DSC_EOK) {
+        return result;
+    }
+
+    for (size_t i = 0; i < ht->capacity; i++) {
+        dsc_kvpair *kvp = ht->kvpairs[i];
+        while (kvp != NULL) {
+            DSC_FUNC(list_append)(&result, &kvp->obj);
+            kvp = kvp->next;
+        }
+    }
+    return result;
+}
+
 /*
  * +----------------------------------------------------------------+
  * |              LIST (DYNAMIC ARRAY) Implementation               |
@@ -821,6 +897,76 @@ dsc_list DSC_FUNC(list_filter)(dsc_list* list, dsc_predicate cf) {
     return result;
 }
 
+void DSC_FUNC(list_from_array)(dsc_list* list, const void* array, size_t count, size_t item_size) {
+    dsc_set_error(DSC_EOK);
+
+    if (list == NULL || array == NULL || item_size == 0) {
+        dsc_set_error(DSC_EINVAL);
+        return;
+    }
+
+    DSC_FUNC(list_init)(list, item_size, count);
+    if (DSC_FUNC(get_error)() != DSC_EOK) {
+        return;
+    }
+
+    for (size_t i = 0; i < count; i++) {
+        const void* item = (const char*)array + (i * item_size);
+        DSC_FUNC(list_append)(list, (void*)item);
+    }
+}
+
+dsc_set DSC_FUNC(list_to_set)(dsc_list* list, dsc_hashfunc* hf, dsc_cmpfunc* cf) {
+    dsc_set result = {0};
+    
+    if (list == NULL || hf == NULL || cf == NULL) {
+        dsc_set_error(DSC_EINVAL);
+        return result;
+    }
+    dsc_set_error(DSC_EOK);
+
+    DSC_FUNC(set_init)(&result, list->length, list->item_size, hf, cf);
+    if (DSC_FUNC(get_error)() != DSC_EOK) {
+        return result;
+    }
+
+    for (size_t i = 0; i < list->length; i++) {
+        void* item = (char*)list->items + (i * list->item_size);
+        DSC_FUNC(set_add)(&result, item);
+    }
+    return result;
+}
+
+bool DSC_FUNC(list_has_duplicates)(dsc_list* list, dsc_hashfunc* hf, dsc_cmpfunc* cf) {
+    if (list == NULL || hf == NULL || cf == NULL) {
+        dsc_set_error(DSC_EINVAL);
+        return false;
+    }
+    dsc_set_error(DSC_EOK);
+
+    dsc_set temp_set;
+    DSC_FUNC(set_init)(&temp_set, list->length, list->item_size, hf, cf);
+    if (DSC_FUNC(get_error)() != DSC_EOK) {
+        return false;
+    }
+
+    bool has_duplicates = false;
+    for (size_t i = 0; i < list->length; i++) {
+        void* item = (char*)list->items + (i * list->item_size);
+        if (!DSC_FUNC(set_add)(&temp_set, item)) {
+            /* If add fails due to existing item, we found a duplicate */
+            if (DSC_FUNC(get_error)() == DSC_EEXISTS) {
+                has_duplicates = true;
+                break;
+            }
+        }
+    }
+
+    DSC_FUNC(set_destroy)(&temp_set);
+    dsc_set_error(DSC_EOK);
+    return has_duplicates;
+}
+
 /*
  * +----------------------------------------------------------------+
  * |                     Set Implementation                         |
@@ -918,6 +1064,57 @@ void DSC_FUNC(set_clear)(dsc_set* set) {
     dsc_set_error(DSC_EOK);
 
     DSC_FUNC(hash_table_clear)(set->ht, NULL);
+}
+
+void DSC_FUNC(set_from_array)(dsc_set* set, const void* array, size_t count, size_t item_size, dsc_hashfunc* hf, dsc_cmpfunc* cf) {
+    dsc_set_error(DSC_EOK);
+
+    if (set == NULL || array == NULL || hf == NULL || cf == NULL) {
+        dsc_set_error(DSC_EINVAL);
+        return;
+    }
+
+    DSC_FUNC(set_init)(set, count, item_size, hf, cf);
+    if (DSC_FUNC(get_error)() != DSC_EOK) {
+        return;
+    }
+
+    for (size_t i = 0; i < count; i++) {
+        const void* item;
+        if (item_size == 0) {
+            /* Variable-length keys: array contains pointers to keys */
+            item = *((const void**)array + i);
+        } else {
+            /* Fixed-size keys: array contains keys directly */
+            item = (const char*)array + (i * item_size);
+        }
+        DSC_FUNC(set_add)(set, item);
+    }
+}
+
+dsc_list DSC_FUNC(set_to_list)(dsc_set* set) {
+    dsc_list result = {0};
+
+    if (set == NULL || set->ht == NULL) {
+        dsc_set_error(DSC_EINVAL);
+        return result;
+    }
+    dsc_set_error(DSC_EOK);
+
+    DSC_FUNC(list_init)(&result, set->ht->key_size ? set->ht->key_size : sizeof(void*), set->ht->size);
+    if (DSC_FUNC(get_error)() != DSC_EOK) {
+        return result;
+    }
+
+    for (size_t i = 0; i < set->ht->capacity; i++) {
+        dsc_kvpair* kvp = set->ht->kvpairs[i];
+        while (kvp != NULL) {
+            DSC_FUNC(list_append)(&result, kvp->key);
+            kvp = kvp->next;
+        }
+    }
+
+    return result;
 }
 
 #endif /* DSC_IMPLEMENTATION */
