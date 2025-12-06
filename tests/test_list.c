@@ -535,7 +535,8 @@ TEST(list_destroy_null_list) {
 DSC_DEFINE_LIST(int, int)
 
 TEST(typed_list_basic) {
-    int_list list = int_list_init(16);
+    int_list list;
+    int_list_init(&list, 16);
     ASSERT_EQ(DSC_EOK, dsc_get_error());
     
     int_list_append(&list, 10);
@@ -550,7 +551,8 @@ TEST(typed_list_basic) {
 }
 
 TEST(typed_list_filter) {
-    int_list list = int_list_init(16);
+    int_list list;
+    int_list_init(&list, 16);
     
     for (int i = 1; i <= 6; i++) {
         int_list_append(&list, i);
