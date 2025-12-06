@@ -7,6 +7,7 @@ Example-focused documentation for the Data Structure Collection library.
 - **[Hash Table](hash_table.md)** - O(1) average insert/lookup/delete with generic keys
 - **[Dynamic List](list.md)** - Growable array with map/filter/foreach
 - **[Set](set.md)** - Hash-based set with automatic duplicate prevention
+- **[Utilities](utilities.md)** - Conversion and interoperability functions (NEW!)
 
 ---
 

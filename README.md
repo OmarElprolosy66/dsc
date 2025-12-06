@@ -177,6 +177,7 @@ if (!dsc_hash_table_insert(&ht, key, value)) {
 - **[Hash Table Guide](docs/hash_table.md)** — All key types, use cases, examples
 - **[List Guide](docs/list.md)** — Map/filter/foreach, use cases, examples
 - **[Set Guide](docs/set.md)** — Deduplication, membership testing, examples
+- **[Utilities Guide](docs/utilities.md)** — Conversions, duplicate detection, LeetCode patterns (NEW!)
 
 ## API Reference
 
@@ -216,13 +217,35 @@ void  dsc_set_destroy(dsc_set* set);
 
 ## Building & Testing
 
+### Run All Tests
+
 ```bash
 cd tests
 ./run_tests.bat    # Windows
 ./run_tests.sh     # Linux/macOS
 ```
 
-All 69 tests must pass.
+### Memory Leak Detection (Valgrind)
+
+Run tests with valgrind to detect memory leaks:
+
+```bash
+# Linux/macOS
+./run_tests.sh --valgrind              # All tests
+./run_tests.sh --valgrind test_list    # Specific test
+
+# Windows (requires WSL)
+run_tests.bat --valgrind               # All tests
+run_tests.bat --valgrind test_list     # Specific test
+```
+
+### Custom Compiler
+
+```bash
+./run_tests.sh clang              # Use clang
+./run_tests.bat cl                # Use MSVC (Windows)
+./run_tests.sh gcc --valgrind     # GCC with valgrind
+```
 
 ## Contributing
 
