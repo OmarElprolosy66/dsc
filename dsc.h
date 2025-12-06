@@ -226,29 +226,29 @@ typedef struct _dsc_hash_table {
 
 typedef void dsc_cleanupfunc(void*);
 
-DSC_API dsc_hash_table* DSC_FUNC(hash_table_init)(size_t size, size_t key_size, dsc_hashfunc *hf, dsc_cmpfunc *cf);
-DSC_API bool            DSC_FUNC(hash_table_insert)(dsc_hash_table *ht, const void *key, void *obj);
-DSC_API void*           DSC_FUNC(hash_table_get)(dsc_hash_table *ht, const void *key);
-DSC_API void*           DSC_FUNC(hash_table_delete)(dsc_hash_table *ht, const void *key);
-DSC_API void            DSC_FUNC(hash_table_destroy)(dsc_hash_table *ht, dsc_cleanupfunc *cf);
+DSC_API void   DSC_FUNC(hash_table_init)(dsc_hash_table *ht, size_t capacity, size_t key_size, dsc_hashfunc *hf, dsc_cmpfunc *cf);
+DSC_API bool   DSC_FUNC(hash_table_insert)(dsc_hash_table *ht, const void *key, void *obj);
+DSC_API void*  DSC_FUNC(hash_table_get)(dsc_hash_table *ht, const void *key);
+DSC_API void*  DSC_FUNC(hash_table_delete)(dsc_hash_table *ht, const void *key);
+DSC_API void   DSC_FUNC(hash_table_destroy)(dsc_hash_table *ht, dsc_cleanupfunc *cf);
+DSC_API void   DSC_FUNC(hash_table_clear)(dsc_hash_table *ht, dsc_cleanupfunc *cf);
 
 #define DSC_DEFINE_HASH_TABLE(K, T, NAME) \
-    typedef struct { dsc_hash_table *impl; } NAME##_table; \
-    static inline NAME##_table NAME##_table_init(size_t s, dsc_hashfunc *hf, dsc_cmpfunc *cf) { \
-        return (NAME##_table){ DSC_FUNC(hash_table_init)(s, sizeof(K), hf, cf) }; \
+    typedef struct { dsc_hash_table impl; } NAME##_table; \
+    static inline void NAME##_table_init(NAME##_table *t, size_t s, dsc_hashfunc *hf, dsc_cmpfunc *cf) { \
+        DSC_FUNC(hash_table_init)(&t->impl, s, sizeof(K), hf, cf); \
     } \
     static inline bool NAME##_table_insert(NAME##_table *t, K *k, T v) { \
-        return DSC_FUNC(hash_table_insert)(t->impl, (const void*)k, (void*)v); \
+        return DSC_FUNC(hash_table_insert)(&t->impl, (const void*)k, (void*)v); \
     } \
     static inline T NAME##_table_get(NAME##_table *t, K *k) { \
-        return (T)DSC_FUNC(hash_table_get)(t->impl, (const void*)k); \
+        return (T)DSC_FUNC(hash_table_get)(&t->impl, (const void*)k); \
     } \
     static inline T NAME##_table_delete(NAME##_table *t, K *k) { \
-        return (T)DSC_FUNC(hash_table_delete)(t->impl, (const void*)k); \
+        return (T)DSC_FUNC(hash_table_delete)(&t->impl, (const void*)k); \
     } \
     static inline void NAME##_table_destroy(NAME##_table *t, dsc_cleanupfunc *cf) { \
-        DSC_FUNC(hash_table_destroy)(t->impl, cf); \
-        t->impl = NULL; \
+        DSC_FUNC(hash_table_destroy)(&t->impl, cf); \
     }
 
 /*
@@ -280,10 +280,8 @@ DSC_API dsc_list DSC_FUNC(list_filter)(dsc_list* list, dsc_predicate cf);
 
 #define DSC_DEFINE_LIST(T, NAME) \
     typedef struct { dsc_list impl; } NAME##_list; \
-    static inline NAME##_list NAME##_list_init(size_t initial_capacity) { \
-        NAME##_list l; \
-        DSC_FUNC(list_init)(&l.impl, sizeof(T), initial_capacity); \
-        return l; \
+    static inline void NAME##_list_init(NAME##_list *l, size_t initial_capacity) { \
+        DSC_FUNC(list_init)(&l->impl, sizeof(T), initial_capacity); \
     } \
     static inline void NAME##_list_destroy(NAME##_list *l) { \
         DSC_FUNC(list_destroy)(&l->impl); \
@@ -315,8 +313,44 @@ DSC_API dsc_list DSC_FUNC(list_filter)(dsc_list* list, dsc_predicate cf);
         dsc_list filtered = DSC_FUNC(list_filter)(&l->impl, cf); \
         result.impl = filtered; \
         return result; \
-    } \
+    }
 
+/*
+ * +----------------------------------------------------------------+
+ * |                             Set API                            |
+ * +----------------------------------------------------------------+
+ */
+typedef struct _dsc_set {
+    dsc_hash_table* ht;
+} dsc_set;
+
+void  DSC_FUNC(set_init)(dsc_set* set, size_t initial_capacity, size_t key_size, dsc_hashfunc* hf, dsc_cmpfunc* cf);
+void  DSC_FUNC(set_destroy)(dsc_set* set);
+bool  DSC_FUNC(set_add)(dsc_set* set, const void* item);
+void  DSC_FUNC(set_remove)(dsc_set* set, const void* item);
+void* DSC_FUNC(set_get)(dsc_set* set, const void* item);
+void  DSC_FUNC(set_clear)(dsc_set* set);
+
+#define DSC_DEFINE_SET(T, NAME) \
+    typedef struct { dsc_set impl; } NAME##_set; \
+    static inline void NAME##_set_init(NAME##_set *s, size_t initial_capacity, size_t key_size, dsc_hashfunc* hf, dsc_cmpfunc* cf) { \
+        DSC_FUNC(set_init)(&s->impl, initial_capacity, key_size, hf, cf); \
+    } \
+    static inline void NAME##_set_destroy(NAME##_set *s) { \
+        DSC_FUNC(set_destroy)(&s->impl); \
+    } \
+    static inline bool NAME##_set_add(NAME##_set *s, const void* item) { \
+        return DSC_FUNC(set_add)(&s->impl, item); \
+    } \
+    static inline void NAME##_set_remove(NAME##_set *s, const void* item) { \
+        DSC_FUNC(set_remove)(&s->impl, item); \
+    } \
+    static inline T NAME##_set_get(NAME##_set *s, const void* item) { \
+        return (T)DSC_FUNC(set_get)(&s->impl, item); \
+    } \
+    static inline void NAME##_set_clear(NAME##_set *s) { \
+        DSC_FUNC(set_clear)(&s->impl); \
+    }
 
 #ifdef __cplusplus
 }
@@ -367,26 +401,25 @@ const char* DSC_FUNC(strerror)(dsc_error_t err) {
  * |                   HASHTABLE Implementation                     |
  * +----------------------------------------------------------------+
  */
-dsc_hash_table *DSC_FUNC(hash_table_init)(size_t capacity, size_t key_size, dsc_hashfunc *hf, dsc_cmpfunc *cf)
+void DSC_FUNC(hash_table_init)(dsc_hash_table *ht, size_t capacity, size_t key_size, dsc_hashfunc *hf, dsc_cmpfunc *cf)
 {
     dsc_set_error(DSC_EOK);
 
+    if (ht == NULL) {
+        dsc_set_error(DSC_EINVAL);
+        return;
+    }
+
     if (hf == NULL) {
         dsc_set_error(DSC_EHASHFUNC);
-        return NULL;
+        return;
     }
 
     /* key_size can be 0 for variable-length keys (e.g., strings) */
 
     if (cf == NULL) {
         dsc_set_error(DSC_ECMPFUNC);
-        return NULL;
-    }
-
-    dsc_hash_table *ht = (dsc_hash_table *)malloc(sizeof(dsc_hash_table));
-    if (ht == NULL) {
-        dsc_set_error(DSC_ENOMEM);
-        return NULL;
+        return;
     }
 
     if (capacity == 0) capacity = 1;
@@ -396,16 +429,16 @@ dsc_hash_table *DSC_FUNC(hash_table_init)(size_t capacity, size_t key_size, dsc_
         .hf       = hf,
         .cf       = cf,
         .key_size = key_size,
+        .size     = 0,
         .kvpairs  = (dsc_kvpair **)calloc(capacity, sizeof(dsc_kvpair *))
     };
     if (ht->kvpairs == NULL) {
         dsc_set_error(DSC_ENOMEM);
-        free(ht);
-        ht = NULL;
-        return NULL;
+        ht->capacity = 0;
+        ht->size = 0;
+        ht->kvpairs = NULL;
+        return;
     }
-
-    return ht;
 }
 
 bool DSC_FUNC(hash_table_insert)(dsc_hash_table *ht, const void *key, void *obj)
@@ -517,7 +550,6 @@ void DSC_FUNC(hash_table_destroy)(dsc_hash_table *ht, dsc_cleanupfunc *cf)
     }
 
     free(ht->kvpairs); ht->kvpairs = NULL;
-    free(ht); ht = NULL;
 }
 
 void *DSC_FUNC(hash_table_delete)(dsc_hash_table *ht, const void *key)
@@ -591,6 +623,30 @@ void *DSC_FUNC(hash_table_get)(dsc_hash_table *ht, const void *key)
     }
 
     return tmp->obj;
+}
+
+void DSC_FUNC(hash_table_clear)(dsc_hash_table *ht, dsc_cleanupfunc *cf)
+{
+    if (ht == NULL) {
+        dsc_set_error(DSC_EINVAL);
+        return;
+    }
+    dsc_set_error(DSC_EOK);
+
+    for (uint32_t i = 0; i < ht->capacity; i++) {
+        while (ht->kvpairs[i] != NULL) {
+            dsc_kvpair *tmp = ht->kvpairs[i];
+            ht->kvpairs[i]  = ht->kvpairs[i]->next;
+
+            free((void *)tmp->key);
+            tmp->key = NULL;
+
+            if (cf != NULL) cf(tmp->obj);
+
+            free(tmp); tmp = NULL;
+        }
+    }
+    ht->size = 0;
 }
 
 /*
@@ -765,6 +821,104 @@ dsc_list DSC_FUNC(list_filter)(dsc_list* list, dsc_predicate cf) {
     return result;
 }
 
+/*
+ * +----------------------------------------------------------------+
+ * |                     Set Implementation                         |
+ * +----------------------------------------------------------------+
+ */
+
+ void DSC_FUNC(set_init)(dsc_set* set, size_t initial_capacity, size_t key_size, dsc_hashfunc* hf, dsc_cmpfunc* cf) {
+    dsc_set_error(DSC_EOK);
+
+    if (set == NULL) {
+        dsc_set_error(DSC_EINVAL);
+        return;
+    }
+
+    set->ht = (dsc_hash_table*)malloc(sizeof(dsc_hash_table));
+    if (set->ht == NULL) {
+        dsc_set_error(DSC_ENOMEM);
+        return;
+    }
+
+    DSC_FUNC(hash_table_init)(set->ht, initial_capacity, key_size, hf, cf);
+    if (DSC_FUNC(get_error)() != DSC_EOK) {
+        free(set->ht);
+        set->ht = NULL;
+        return;
+    }
+}
+
+void DSC_FUNC(set_destroy)(dsc_set* set) {
+    if (set == NULL) {
+        dsc_set_error(DSC_EINVAL);
+        return;
+    }
+    dsc_set_error(DSC_EOK);
+
+    if (set->ht != NULL) {
+        DSC_FUNC(hash_table_destroy)(set->ht, NULL);
+        free(set->ht);
+        set->ht = NULL;
+    }
+}
+
+bool DSC_FUNC(set_add)(dsc_set* set, const void* item) {
+    dsc_set_error(DSC_EOK);
+
+    if (set == NULL || item == NULL) {
+        dsc_set_error(DSC_EINVAL);
+        return false;
+    }
+
+    bool res = DSC_FUNC(hash_table_insert)(set->ht, item, (void*)item);
+    if (!res) {
+        // Error already set by hash_table_insert
+        return false;
+    }
+    return true;
+}
+
+void DSC_FUNC(set_remove)(dsc_set* set, const void* item) {
+    dsc_set_error(DSC_EOK);
+
+    if (set == NULL || item == NULL) {
+        dsc_set_error(DSC_EINVAL);
+        return;
+    }
+
+    void* removed = DSC_FUNC(hash_table_delete)(set->ht, item);
+    if (removed == NULL) {
+        // Error already set by hash_table_delete
+        return;
+    }
+}
+
+void* DSC_FUNC(set_get)(dsc_set* set, const void* item) {
+    dsc_set_error(DSC_EOK);
+
+    if (set == NULL || item == NULL) {
+        dsc_set_error(DSC_EINVAL);
+        return NULL;
+    }
+
+    void* found = DSC_FUNC(hash_table_get)(set->ht, item);
+    if (found == NULL) {
+        // Error already set by hash_table_get
+        return NULL;
+    }
+    return found;
+}
+
+void DSC_FUNC(set_clear)(dsc_set* set) {
+    if (set == NULL) {
+        dsc_set_error(DSC_EINVAL);
+        return;
+    }
+    dsc_set_error(DSC_EOK);
+
+    DSC_FUNC(hash_table_clear)(set->ht, NULL);
+}
 
 #endif /* DSC_IMPLEMENTATION */
 
