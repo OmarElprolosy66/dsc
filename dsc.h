@@ -17,6 +17,8 @@
  * --------
  *   • Hash Table    — O(1) average insert/lookup/delete with automatic resizing with Generic keys (int, string, struct, pointer)
  *   • Dynamic List  — Growable array with map, filter, and foreach operations
+ *   • Set           — Hash-based set with automatic duplicate prevention
+ *   • Stack         — LIFO data structure with O(1) push/pop/peek operations
  *   • Type-Safe     — Generic macros for compile-time type safety
  *   • Error System  — Thread-local errno-style error handling
  *   • Zero Dependencies — Only requires standard C library
@@ -354,6 +356,52 @@ DSC_API dsc_list  DSC_FUNC(set_to_list)(dsc_set* set);
     static inline void NAME##_set_clear(NAME##_set *s) { \
         DSC_FUNC(set_clear)(&s->impl); \
     }
+
+/*
+ * +----------------------------------------------------------------+
+ * |                           Stack API                            |
+ * +----------------------------------------------------------------+
+ */
+typedef struct _dsc_stack {
+    dsc_list list;
+} dsc_stack;
+
+DSC_API void      DSC_FUNC(stack_init)(dsc_stack* stack, size_t item_size, size_t initial_capacity);
+DSC_API bool      DSC_FUNC(stack_push)(dsc_stack* stack, void* item);
+DSC_API void*     DSC_FUNC(stack_pop)(dsc_stack* stack, void *out_item);
+DSC_API void*     DSC_FUNC(stack_peek)(dsc_stack* stack);
+DSC_API size_t    DSC_FUNC(stack_size)(dsc_stack* stack);
+DSC_API bool      DSC_FUNC(stack_is_empty)(dsc_stack* stack);
+DSC_API void      DSC_FUNC(stack_clear)(dsc_stack* stack);
+DSC_API void      DSC_FUNC(stack_destroy)(dsc_stack* stack);
+
+#define DSC_DEFINE_STACK(T, NAME) \
+    typedef struct { dsc_stack impl; } NAME##_stack; \
+    static inline void NAME##_stack_init(NAME##_stack *s, size_t cap) { \
+        DSC_FUNC(stack_init)(&s->impl, sizeof(T), cap); \
+    } \
+    static inline bool NAME##_stack_push(NAME##_stack *s, T item) { \
+        return DSC_FUNC(stack_push)(&s->impl, &item); \
+    } \
+    static inline bool NAME##_stack_pop(NAME##_stack *s, T* out) { \
+        return DSC_FUNC(stack_pop)(&s->impl, out); \
+    } \
+    static inline T* NAME##_stack_peek(NAME##_stack *s) { \
+        return (T*)DSC_FUNC(stack_peek)(&s->impl); \
+    } \
+    static inline size_t NAME##_stack_size(NAME##_stack *s) { \
+        return DSC_FUNC(stack_size)(&s->impl); \
+    } \
+    static inline bool NAME##_stack_is_empty(NAME##_stack *s) { \
+        return DSC_FUNC(stack_is_empty)(&s->impl); \
+    } \
+    static inline void NAME##_stack_clear(NAME##_stack *s) { \
+        DSC_FUNC(stack_clear)(&s->impl); \
+    } \
+    static inline void NAME##_stack_destroy(NAME##_stack *s) { \
+        DSC_FUNC(stack_destroy)(&s->impl); \
+    }
+
 
 /*
  * +----------------------------------------------------------------+
@@ -1115,6 +1163,97 @@ dsc_list DSC_FUNC(set_to_list)(dsc_set* set) {
     }
 
     return result;
+}
+
+/*
+ * +----------------------------------------------------------------+
+ * |                       Stack Implementation                     |
+ * +----------------------------------------------------------------+
+ */
+
+ void DSC_FUNC(stack_init)(dsc_stack* stack, size_t item_size, size_t initial_capacity) {
+    if (stack == NULL || item_size == 0) {
+        dsc_set_error(DSC_EINVAL);
+        return;
+    }
+
+    dsc_list_init(&stack->list, item_size, initial_capacity);
+}
+
+bool DSC_FUNC(stack_push)(dsc_stack* stack, void* item) {
+     if (stack == NULL || item == NULL) {
+        dsc_set_error(DSC_EINVAL);
+        return false;
+    }
+
+    dsc_list_append(&stack->list, item);
+
+    return dsc_get_error() == DSC_EOK;
+}
+
+void* DSC_FUNC(stack_pop)(dsc_stack* stack, void *out_item) {
+    if (stack == NULL) {
+        dsc_set_error(DSC_EINVAL);
+        return NULL;
+    }
+    if (stack->list.length == 0) {
+        dsc_set_error(DSC_EEMPTY);
+        return NULL;
+    }
+
+    void* item = DSC_FUNC(list_get)(&stack->list, stack->list.length - 1);
+
+    memcpy(out_item, item, stack->list.item_size);
+    DSC_FUNC(list_pop)(&stack->list);
+
+    return out_item;
+}
+
+void* DSC_FUNC(stack_peek)(dsc_stack* stack) {
+    if (stack == NULL) {
+        dsc_set_error(DSC_EINVAL);
+        return NULL;
+    }
+    if (stack->list.length == 0) {
+        dsc_set_error(DSC_EEMPTY);
+        return NULL;
+    }
+    dsc_set_error(DSC_EOK);
+    return dsc_list_get(&stack->list, stack->list.length - 1);
+}
+
+size_t DSC_FUNC(stack_size)(dsc_stack* stack) {
+    if (stack == NULL) {
+        dsc_set_error(DSC_EINVAL);
+        return 0;
+    }
+    dsc_set_error(DSC_EOK);
+    return stack->list.length;
+}
+
+bool DSC_FUNC(stack_is_empty)(dsc_stack* stack) {
+    if (stack == NULL) {
+        dsc_set_error(DSC_EINVAL);
+        return true;
+    }
+    dsc_set_error(DSC_EOK);
+    return stack->list.length == 0;
+}
+
+void DSC_FUNC(stack_clear)(dsc_stack* stack) {
+    if (stack == NULL) {
+        dsc_set_error(DSC_EINVAL);
+        return;
+    }
+    dsc_list_clear(&stack->list);
+}
+
+void DSC_FUNC(stack_destroy)(dsc_stack* stack) {
+    if (stack == NULL) {
+        dsc_set_error(DSC_EINVAL);
+        return;
+    }
+    dsc_list_destroy(&stack->list);
 }
 
 #endif /* DSC_IMPLEMENTATION */
