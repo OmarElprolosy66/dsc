@@ -7,7 +7,8 @@ Example-focused documentation for the Data Structure Collection library.
 - **[Hash Table](hash_table.md)** - O(1) average insert/lookup/delete with generic keys
 - **[Dynamic List](list.md)** - Growable array with map/filter/foreach
 - **[Set](set.md)** - Hash-based set with automatic duplicate prevention
-- **[Utilities](utilities.md)** - Conversion and interoperability functions (NEW!)
+- **[Stack](stack.md)** - LIFO data structure with O(1) push/pop/peek (NEW!)
+- **[Utilities](utilities.md)** - Conversion and interoperability functions
 
 ---
 
@@ -85,6 +86,25 @@ printf("Size: %zu\n", tags.ht->size);  // 2
 dsc_set_destroy(&tags);
 ```
 
+### Stack
+
+```c
+dsc_stack stack;
+dsc_stack_init(&stack, sizeof(int), 16);
+
+int vals[] = {1, 2, 3, 4};
+for (int i = 0; i < 4; i++) {
+    dsc_stack_push(&stack, &vals[i]);
+}
+
+int val;
+while (dsc_stack_pop(&stack, &val)) {
+    printf("%d ", val);  // 4 3 2 1 (LIFO)
+}
+
+dsc_stack_destroy(&stack);
+```
+
 ---
 
 ## Common Patterns
@@ -144,6 +164,7 @@ int str_cmp(const void* k1, size_t l1, const void* k2, size_t l2) {
 // Integers
 int int_cmp(const void* k1, size_t l1, const void* k2, size_t l2) {
     (void)l1; (void)l2;
+DSC_DEFINE_STACK(int, int)               // Type=int, Name=int
     return *(int*)k1 - *(int*)k2;
 }
 
@@ -192,7 +213,8 @@ grep -r "dsc_get_error" docs/
 
 # Find specific data structure usage
 grep -r "dsc_hash_table_init" docs/
-grep -r "dsc_list_append" docs/
+grep -r "dsc_list_append" d
+grep -r "dsc_stack_push" docs/ocs/
 grep -r "dsc_set_add" docs/
 
 # Find use cases

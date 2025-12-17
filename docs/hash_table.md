@@ -471,3 +471,12 @@ dsc_hash_table_clear(&ht, NULL);  // Remove all items but keep capacity
 
 dsc_hash_table_destroy(&ht, NULL);
 ```
+
+---
+
+## See Also
+
+- [List](list.md) - Growable array for ordered data
+- [Set](set.md) - Hash-based set built on hash table
+- [Stack](stack.md) - LIFO data structure
+- [Utilities](utilities.md) - Extract keys/values, conversions

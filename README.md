@@ -14,6 +14,7 @@ A lightweight, single-header C library for common data structures. STB-style, ze
 - **Hash Table** — O(1) insert/lookup/delete, generic keys (string/int/struct/pointer)
 - **Dynamic List** — Growable array with map/filter/foreach
 - **Set** — Hash-based set with duplicate prevention
+- **Stack** — LIFO data structure with O(1) push/pop/peek
 - **Type-Safe** — Generic macros for compile-time safety
 - **Error System** — Thread-local errno-style handling
 - **Zero Deps** — Only standard C library
@@ -142,6 +143,29 @@ dsc_set_destroy(&tags);
 
 **More examples:** [Deduplication](docs/set.md#use-case-email-deduplication), [Graph traversal](docs/set.md#use-case-visited-nodes-graph-traversal)
 
+### Stack
+
+```c
+dsc_stack stack;
+dsc_stack_init(&stack, sizeof(int), 16);
+
+// Push elements
+int values[] = {1, 2, 3, 4};
+for (int i = 0; i < 4; i++) {
+    dsc_stack_push(&stack, &values[i]);
+}
+
+// Pop in LIFO order (4, 3, 2, 1)
+int val;
+while (dsc_stack_pop(&stack, &val)) {
+    printf("%d ", val);
+}
+
+dsc_stack_destroy(&stack);
+```
+
+**More examples:** [Undo/Redo](docs/stack.md#use-case-undoredo-system), [Expression evaluation](docs/stack.md#use-case-expression-evaluation), [Backtracking](docs/stack.md#use-case-backtracking-path-finding)
+
 ### Type-Safe Wrappers
 
 ```c
@@ -177,7 +201,8 @@ if (!dsc_hash_table_insert(&ht, key, value)) {
 - **[Hash Table Guide](docs/hash_table.md)** — All key types, use cases, examples
 - **[List Guide](docs/list.md)** — Map/filter/foreach, use cases, examples
 - **[Set Guide](docs/set.md)** — Deduplication, membership testing, examples
-- **[Utilities Guide](docs/utilities.md)** — Conversions, duplicate detection, LeetCode patterns (NEW!)
+- **[Stack Guide](docs/stack.md)** — LIFO operations, undo/redo, backtracking (NEW!)
+- **[Utilities Guide](docs/utilities.md)** — Conversions, duplicate detection, LeetCode patterns
 
 ## API Reference
 
@@ -214,7 +239,20 @@ void* dsc_set_get(dsc_set* set, const void* item);
 void  dsc_set_remove(dsc_set* set, const void* item);
 void  dsc_set_destroy(dsc_set* set);
 ```
+# Stack
 
+```c
+void   dsc_stack_init(dsc_stack* stack, size_t item_size, size_t initial_capacity);
+bool   dsc_stack_push(dsc_stack* stack, const void* item);
+void*  dsc_stack_pop(dsc_stack* stack, void* out_item);
+void*  dsc_stack_peek(dsc_stack* stack);
+size_t dsc_stack_size(dsc_stack* stack);
+bool   dsc_stack_is_empty(dsc_stack* stack);
+void   dsc_stack_clear(dsc_stack* stack);
+void   dsc_stack_destroy(dsc_stack* stack);
+```
+
+##
 ## Building & Testing
 
 ### Run All Tests

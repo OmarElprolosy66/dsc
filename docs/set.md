@@ -453,3 +453,12 @@ dsc_hash_table_insert(&map, &key, value);  // Stores key -> value
 dsc_set_destroy(&unique_ids);
 dsc_hash_table_destroy(&map, NULL);
 ```
+
+---
+
+## See Also
+
+- [Hash Table](hash_table.md) - Set is built on hash table
+- [List](list.md) - Ordered collection with duplicates allowed
+- [Stack](stack.md) - LIFO data structure
+- [Utilities](utilities.md) - Convert arrays/lists to sets, duplicate detection

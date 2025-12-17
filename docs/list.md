@@ -472,3 +472,12 @@ for (size_t i = 0; i < big_list.length; i++) {
 
 dsc_list_destroy(&big_list);
 ```
+
+---
+
+## See Also
+
+- [Hash Table](hash_table.md) - Key-value storage with O(1) lookup
+- [Set](set.md) - Unique element collections
+- [Stack](stack.md) - LIFO data structure built on list
+- [Utilities](utilities.md) - Array conversions, duplicate detection
